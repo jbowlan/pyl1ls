@@ -1,0 +1,30 @@
+python implementation of least angle regression LARS
+this solves the l1 regularized least squares problem for 
+linear regression.
+
+Author: John Bowlan
+
+Requirements: Python, Numpy, Scipy.linalg
+
+LEAST angle regression is a "homotopy" method for solving a l1
+regularized least squares problem.  It is
+
+Summary of LARS algorithm from Hastie, Tibshirani, et. al. p 74
+
+1. standardize the predictors to have mean zero and unit norm. Start
+with the residual r = y - ybar, beta_1 = ... beta_p = 0
+
+2. Find the predictor x_j most correlated with r
+
+3. Move beta_j from 0 towards its least-squares coefficient
+dot(X[j,:], r) until some other competitor X[k,:] has as much
+correlation with the current residual as does X[j,:]
+
+4. Move beta[j] and beta[k] in the direction defined by the joint
+least squares coefficient of the current residual on (X[j,:],X[k,:])
+until some other competitor X[l] has as much correlation with the
+current resuidual
+
+5. Continue in this way until all p predictors have been
+entered. After min(N-1,p) steps, we arrive at the full least-squares
+solution
