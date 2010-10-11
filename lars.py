@@ -69,23 +69,21 @@ def lars(X, y):
     n,p = X.shape
     
     mu = zeros(n)
-    act_set = zeros(p, dtype=bool)
-    inact_set = ones(p, dtype=bool)
+    act_set = []
+    inact_set = range(p)
 
     k = 0
     vs = 0
     nvs = min(n-1,p)
 
-    beta = zeros((nvs,p))
+    beta = zeros((2*nvs,p))
 
     maxiter = nvs * 8
 
     # initial cholesky decomposition of the gram matrix
     R = zeros((0,0))
 
-    while vs < nvs and k < maxiter:
-        k += 1
-        
+    while vs < nvs and k < maxiter:      
         print "new iteration: vs = ", vs, " nvs = ", nvs, " k = ", k
         print "mu.shape = ", mu.shape
         #print "mu = ", mu
@@ -94,7 +92,8 @@ def lars(X, y):
         # and element that has the maximum correlation
         c = dot(X.T, y - mu)
         #c = c.reshape(1,len(c))
-        j = argmax(abs(c[inact_set]))
+        jia = argmax(abs(c[inact_set]))
+        j = inact_set[jia]
         C = c[j]
         
         print "predictor ", j, " max corr with w/ current residual: ", C
@@ -104,20 +103,20 @@ def lars(X, y):
 
         # add the most correlated predictor to the active set
         R = cholinsert(R,X[:,j],X[:,act_set])
-        act_set[j] = True
-        inact_set[j] = False
+        act_set.append(j)
+        inact_set.remove(j)
         vs += 1
 
         print "R shape after insert ", R.shape
-
-        print "active set(",  sum(act_set == 1.0), ") = ", \
-            arange(len(act_set))[act_set]
+        
+        print "active set = ", act_set
+        print "inactive set = ", inact_set 
 
         # get the signs of the correlations
         s = sign(c[act_set])
         s = s.reshape(len(s),1)
-        print "R.shape = ", R.shape
-        print "s.shape = ", s.shape
+        #print "R.shape = ", R.shape
+        #print "s.shape = ", s.shape
 
         # move in the direction of the least squares solution
         
@@ -127,56 +126,39 @@ def lars(X, y):
 
         # equiangular direction - this should be a unit vector
         print "X[:,act_set].shape = ",X[:,act_set].shape
-        print "w.shape = ",w.shape
+        #print "w.shape = ",w.shape
 
         u = dot(X[:,act_set], w).reshape(-1)
 
-        print "norm of u = ", norm(u)
-        print "u.shape = ", u.shape
+        #print "norm of u = ", norm(u)
+        #print "u.shape = ", u.shape
     
         # if this is the last iteration i.e. all variables are in the
         # active set, then set the step toward the full least squares
         # solution
         if vs == nvs:
+            print "last variable going all the way to least squares solution"
             gamma = C / AA
         else:
             a = dot(X.T,u)
             a = a.reshape((len(a),))
-        #     print "c[inact_set] = ", c[inact_set]
-#             print "a[inact_set] = ", a[inact_set]
-
             tmp = r_[(C - c[inact_set])/(AA - a[inact_set]), 
                      (C + c[inact_set])/(AA + a[inact_set])]
-        #     print "c.shape = ", c.shape
-#             print "a.shape = ", a.shape
-#             print "tmp[tmp>0] = ", tmp[tmp>0].shape
-#             print "C/AA = ", array([C/AA]).shape
-            
             gamma = min(r_[tmp[tmp > 0], array([C/AA]).reshape(-1)])
         
-        print "mu.shape = ", mu.shape
-        print "gamma * u shape = ", u.shape
-
         mu = mu + gamma * u
         
-        #if beta.shape[0] < k + 1:
-        
-        print "beta.shape = ", beta.shape
-        beta = c_[beta, zeros((beta.shape[0],))]
-        print "beta.shape = ", beta.shape
-
-        print "gamma * w.T", gamma * w.T
-        print "beta[k,act_set] = ", beta[k,act_set]
-
+        if beta.shape[0] < k:        
+            beta = c_[beta, zeros((beta.shape[0],))]
         beta[k+1,act_set] = beta[k,act_set] + gamma*w.T.reshape(-1)
-        
-        #print "beta = ", beta
+                
+        k += 1
 
     return beta
 
 def load_pros_data():
     # load the prostate data
-    dat = scipy.loadtxt('prostate.data', skiprows=1)
+    dat = scipy.loadtxt('diabetes.data', skiprows=1)
     
     # now normalize and center the data
     X = dat[:,1:9]
@@ -186,7 +168,5 @@ def load_pros_data():
     X = (X - mean(X, axis=0))/std(X, axis=0)
     y = (y - mean(y))/std(y)
 
-    beta = lars(X, y)
-    
-    return beta
+    return X,y
 
