@@ -13,6 +13,8 @@ from scipy import array, log, c_, r_, shape, pi, sqrt, zeros, mean, linspace, \
 
 from scipy.linalg import solve, cho_solve, norm
 
+import pylab
+
 """
 LEAST angle regression is a "homotopy" method for solving a l1
 regularized least squares problem.  It is
@@ -60,113 +62,118 @@ def cholinsert(R, x, X):
 # from the cholesky factorization
 
 def lars(X, y):
-    # n is the number of variables, p is the number of "predictors" or
-    # basis vectors
-
-    # the predictors are assumed to be standardized and y is centered.
-
-    # in the example of the prostate data n would be the number 
+    # n = number of data points, p = number of predictors
     n,p = X.shape
     
+    # mu = regressed version of y sice there are no predictors it is initially the 
+    # zero vector
     mu = zeros(n)
+    
+    # active set and inactive set - they should invariably be complements
     act_set = []
     inact_set = range(p)
 
-    k = 0
-    vs = 0
-    nvs = min(n-1,p)
-
-    beta = zeros((2*nvs,p))
-
-    maxiter = nvs * 8
-
+    # current regression coefficients and correlation with residual
+    beta = zeros((p+1,p))
+    corr = zeros((p+1,p))
+    
     # initial cholesky decomposition of the gram matrix
+    # since the active set is empty this is the empty matrix
     R = zeros((0,0))
 
-    while vs < nvs and k < maxiter:      
-        print "new iteration: vs = ", vs, " nvs = ", nvs, " k = ", k
-        print "mu.shape = ", mu.shape
-        #print "mu = ", mu
-
-        # compute correlation with inactive set
-        # and element that has the maximum correlation
+    # add the variables one at a time
+    for k in xrange(p):
+        print "NEW ITERATION k = ", k, " active_set = ", act_set
+        
+        # compute the current correlation
         c = dot(X.T, y - mu)
-        #c = c.reshape(1,len(c))
-        jia = argmax(abs(c[inact_set]))
-        j = inact_set[jia]
-        C = c[j]
         
-        print "predictor ", j, " max corr with w/ current residual: ", C
-        print "adding ", j, " to active set"
-
-        print "R shape before insert: ", R.shape
-
+        print "current correlation = ", c
+        
+        # store the result
+        corr[k,:] = c
+        
+        # choose the predictor with the maximum correlation and add it to the active
+        # set
+        jmax = inact_set[argmax(abs(c[inact_set]))]
+        C = c[jmax]
+        
+        print "iteration = ", k, " jmax = ", jmax, " C = ", C
+        
         # add the most correlated predictor to the active set
-        R = cholinsert(R,X[:,j],X[:,act_set])
-        act_set.append(j)
-        inact_set.remove(j)
-        vs += 1
-
-        print "R shape after insert ", R.shape
+        R = cholinsert(R,X[:,jmax],X[:,act_set])
+        act_set.append(jmax)
+        inact_set.remove(jmax)
         
-        print "active set = ", act_set
-        print "inactive set = ", inact_set 
-
         # get the signs of the correlations
         s = sign(c[act_set])
         s = s.reshape(len(s),1)
-        #print "R.shape = ", R.shape
-        #print "s.shape = ", s.shape
-
-        # move in the direction of the least squares solution
+        print "sign = ", s
         
+        # move in the direction of the least squares solution restricted to the active
+        # set
+         
         GA1 = solve(R,solve(R.T, s))
         AA = 1/sqrt(sum(GA1 * s))
         w = AA * GA1
-
-        # equiangular direction - this should be a unit vector
-        print "X[:,act_set].shape = ",X[:,act_set].shape
-        #print "w.shape = ",w.shape
-
+        
+        print "AA = ", AA
+        print "w = ", w
+        
         u = dot(X[:,act_set], w).reshape(-1)
 
-        #print "norm of u = ", norm(u)
-        #print "u.shape = ", u.shape
+        print "norm of u = ", norm(u)
+        print "u.shape = ", u.shape
     
         # if this is the last iteration i.e. all variables are in the
         # active set, then set the step toward the full least squares
         # solution
-        if vs == nvs:
+        if k == p:
             print "last variable going all the way to least squares solution"
             gamma = C / AA
         else:
             a = dot(X.T,u)
             a = a.reshape((len(a),))
+            
             tmp = r_[(C - c[inact_set])/(AA - a[inact_set]), 
                      (C + c[inact_set])/(AA + a[inact_set])]
+            
             gamma = min(r_[tmp[tmp > 0], array([C/AA]).reshape(-1)])
+
+        print "ITER k = ", k, ", gamma = ", gamma
         
         mu = mu + gamma * u
         
         if beta.shape[0] < k:        
             beta = c_[beta, zeros((beta.shape[0],))]
         beta[k+1,act_set] = beta[k,act_set] + gamma*w.T.reshape(-1)
-                
-        k += 1
-
-    return beta
-
-def load_pros_data():
-    # load the prostate data
-    dat = scipy.loadtxt('diabetes.data', skiprows=1)
     
-    # now normalize and center the data
-    X = dat[:,1:9]
-    y = dat[:,9]
-    train = dat[:,10] == 1
+    return beta, corr
+
+def plot_lars(X,y):
+    # make two plots of the correlations with time
+    beta, corr = lars(X,y)
+    l1B = scipy.sum(abs(beta), axis=1)
+    
+    pylab.figure()
+    for j in xrange(corr.shape[1]):
+        pylab.plot(arange(corr.shape[0]), abs(corr[:,j]), label='%d'%j)
+    pylab.legend()
+
+
+    
+def load_data(name='diabetes.data'):
+    print "loading ", name
+    dat = scipy.loadtxt(name, skiprows=1)
+    print "dat.shape = ", dat.shape
+    cs = dat.shape[1]
+
+    X = dat[:,:cs-1]
+    y = dat[:,cs-1]
     
     X = (X - mean(X, axis=0))/std(X, axis=0)
     y = (y - mean(y))/std(y)
 
     return X,y
+
 
